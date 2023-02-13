@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 from functools import reduce
+from itertools import product
 
 # The entirety of this code has been respectfully snagged from:
 # https://github.com/MorvanZhou/Reinforcement-learning-with-tensorflow
@@ -19,6 +20,17 @@ class MDP:
                                                               ))
         return float(1)/float(n)
 
+    def initial_state(self): return 0
+
+    def next_state(self, s, a):
+        l = list(map(lambda x: (x[0], x[1], self.p(s, x[0], x[1], a)), product(self.rewards, range(self.states))))
+        assert(reduce(lambda x, y: x + y[2], l, 0) == 1)
+        sample = np.random.rand()
+        for (r, s_, x) in l:
+            sample -= x
+            if sample < 0:
+                return (r, s_)
+
 # States: 0 (Blue), 1 (Pink), 2 (Green)
 # Actions: 0 (Left), 1 (Right)
 class DawEtalTwoStageMDP(MDP):
@@ -33,8 +45,8 @@ class DawEtalTwoStageMDP(MDP):
             case [0, 0, 2, 1]: return 0.3
             case [1, r, 0, 0]: return 1/len(self.rewards)
             case [1, r, 0, 1]: return 1/len(self.rewards)
-            case [2, r, 0, 0]: return 1/len(self.rewards)
-            case [2, r, 0, 1]: return 1/len(self.rewards)
+            case [2, 0, 0, 0]: return 1
+            case [2, 0, 0, 1]: return 1
             case _: return 0
 
 class RL(object):
@@ -105,8 +117,18 @@ class SarsaTable(RL):
         self.q_table.loc[s, a] += self.lr * (q_target - q_predict)  # update
 
 def main():
-    mdp = DawEtalTwoStageMDP([-1,0,1])
+    mdp = DawEtalTwoStageMDP([0,1])
     print(mdp.p(0, 0, 2, 1))
+    s = mdp.initial_state()
+    rl = QLearningTable([0,1])
+    for _ in range(0, 1000):
+        a = rl.choose_action(s)
+        (r, s_) = mdp.next_state(s, 0)
+        rl.learn(s, a, r, s_)
+        print((s,a,r,s_))
+        s = s_
+    print(rl.q_table)
+
 
 if __name__ == "__main__":
     main()
