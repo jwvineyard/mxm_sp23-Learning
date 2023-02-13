@@ -1,8 +1,41 @@
 import numpy as np
 import pandas as pd
+from functools import reduce
 
 # The entirety of this code has been respectfully snagged from:
 # https://github.com/MorvanZhou/Reinforcement-learning-with-tensorflow
+
+class MDP:
+    def __init__(self, states=1, rewards=[-1,0,1], actions=lambda s: 2):
+        self.states = states;
+        self.rewards = rewards;
+        self.actions = actions;
+
+    def p(self, s, r, s_, a):
+        n = self.states * len(self.rewards) * self.states * reduce(lambda a,b: a*b,
+                                                              map(
+                                                                  lambda s: self.actions(s),
+                                                                  range(0, self.states)
+                                                              ))
+        return float(1)/float(n)
+
+# States: 0 (Blue), 1 (Pink), 2 (Green)
+# Actions: 0 (Left), 1 (Right)
+class DawEtalTwoStageMDP(MDP):
+    def __init__(self, rewards):
+        super(DawEtalTwoStageMDP, self).__init__(3, rewards, actions=lambda s: 2)
+
+    def p(self, s, r, s_, a):
+        match [s,r,s_,a]:
+            case [0, 0, 1, 0]: return 0.3
+            case [0, 0, 1, 1]: return 0.7
+            case [0, 0, 2, 0]: return 0.7
+            case [0, 0, 2, 1]: return 0.3
+            case [1, r, 0, 0]: return 1/len(self.rewards)
+            case [1, r, 0, 1]: return 1/len(self.rewards)
+            case [2, r, 0, 0]: return 1/len(self.rewards)
+            case [2, r, 0, 1]: return 1/len(self.rewards)
+            case _: return 0
 
 class RL(object):
     def __init__(self, action_space, learning_rate=0.01, reward_decay=0.9, e_greedy=0.9):
@@ -70,3 +103,10 @@ class SarsaTable(RL):
         else:
             q_target = r  # next state is terminal
         self.q_table.loc[s, a] += self.lr * (q_target - q_predict)  # update
+
+def main():
+    mdp = DawEtalTwoStageMDP([-1,0,1])
+    print(mdp.p(0, 0, 2, 1))
+
+if __name__ == "__main__":
+    main()
