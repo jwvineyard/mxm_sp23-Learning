@@ -12,7 +12,7 @@
     };
   };
 
-  outputs = {self, nixpkgs, pypi-deps-db, mach-nix }@inp:
+  outputs = {self, nixpkgs, pypi-deps-db, mach-nix, }@inp:
     let
       requirements = builtins.readFile ./requirements.txt;
       python = "python310";
@@ -22,10 +22,21 @@
         (system: f system (import nixpkgs {inherit system;}));
     in
     {
-      packages = forAllSystems (system: pkgs: {
-        default = mach-nix.lib."${system}".mkPython {
+      packages = forAllSystems (system: pkgs: let
+        pyEnv = mach-nix.lib."${system}".mkPython {
           inherit requirements;
           inherit python;
+        };
+      in {
+        default = pyEnv;
+        jupyter = mach-nix.nixpkgs.mkShell {
+          buildInputs = [
+            pyEnv
+          ];
+
+          shellHook = ''
+            jupyter lab --notebook-dir=~/
+          '';
         };
       });
 

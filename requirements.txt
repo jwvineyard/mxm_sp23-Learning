@@ -1,4 +1,4 @@
 numpy
 pandas
 gymnasium
-cleanrl
+tqdm

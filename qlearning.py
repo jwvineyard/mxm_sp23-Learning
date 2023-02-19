@@ -1,17 +1,20 @@
 from collections import defaultdict
 import numpy as np
 from daw_etal_two_stage import DawEtalTwoStageMDP
-from agent import Agent, train_episode
+from agent import Agent, train_episode, train
 
 '''
 A Q-Learning implementation for a Gymnasium environment (with a discrete observation/action space).
 '''
 class QLearning(Agent):
+    def rate_decay(base=0.95, decay=0.995):
+        return lambda t: base * (decay ** t)
+
     def __init__(self,
             environment,
             discount_rate=0.95,
-            learning_rate=lambda t: 0.95,
-            exploration_rate=lambda t: 0.1,
+            learning_rate=rate_decay(),
+            exploration_rate=rate_decay(),
             seed=None):
         self.env = environment
         # self.t = 0
@@ -49,7 +52,6 @@ class QLearning(Agent):
             terminated,
             truncated,
             next_observation):
-        print(self.q_values)
         future_q_value = (not terminated) * np.max(self.q_values[next_observation])
         temporal_difference = (
             reward + self.discount_rate * future_q_value - self.q_values[observation][action]
@@ -61,7 +63,7 @@ class QLearning(Agent):
 
 def main():
     env = DawEtalTwoStageMDP(episodic=True)
-    train_episode(QLearning(env), env)
+    train(QLearning(env), env, n_episodes=200_000)
 
 if __name__ == "__main__":
     main()

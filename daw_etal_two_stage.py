@@ -2,7 +2,6 @@ import gymnasium as gym
 from gymnasium import spaces
 import itertools
 import operator
-import cleanrl
 
 def unzip(i):
     l, r = itertools.tee(i);
@@ -23,7 +22,6 @@ class DawEtalTwoStageMDP(gym.Env):
         self.action_space = spaces.Discrete(2)
 
         self.reward_distributions = tuple(map(lambda x: tuple(unzip(x.items())), rewards))
-        print(self.reward_distributions)
         self.episodic = episodic
 
         assert render_mode is None or render_mode in self.metadata["render_modes"]

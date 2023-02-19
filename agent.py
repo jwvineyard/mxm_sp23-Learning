@@ -1,3 +1,5 @@
+from tqdm import tqdm
+
 class Agent:
     def get_action(self, observation): pass
 
@@ -24,3 +26,6 @@ def train_episode(agent, environment):
         done = terminated or truncated
         obs = next_obs
 
+def train(agent, environment, n_episodes=2000):
+    for episode in tqdm(range(n_episodes)):
+        train_episode(agent, environment)
