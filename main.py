@@ -49,6 +49,11 @@ class DawEtalTwoStageMDP(MDP):
             case [2, 0, 0, 1]: return 1
             case _: return 0
 
+class DiceGameMDP(MDP):
+    def __init__(self):
+        super(DiceGameMDP, self).__init__(states=2, rewards=[0,3,5], actions=lambda s: 2)
+
+
 class RL(object):
     def __init__(self, action_space, learning_rate=0.01, reward_decay=0.9, e_greedy=0.9):
         self.actions = action_space  # a list

@@ -16,8 +16,6 @@
     let
       requirements = builtins.readFile ./requirements.txt;
       python = "python310";
-      # name = "cem";
-      # tag = "main";
 
       supportedSystems = [ "aarch64-linux" "x86_64-linux" "aarch64-darwin" "x86_64-darwin" ];
       forAllSystems = f: nixpkgs.lib.genAttrs supportedSystems
