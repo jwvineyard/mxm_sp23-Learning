@@ -1,6 +1,7 @@
 {
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-21.11";
+    flake-utils.url = "github:numtide/flake-utils";
     pypi-deps-db = {
       url = "github:DavHau/pypi-deps-db";
       flake = false;
@@ -12,22 +13,18 @@
     };
   };
 
-  outputs = {self, nixpkgs, pypi-deps-db, mach-nix, }@inp:
-    let
+  outputs = {self, nixpkgs, flake-utils, pypi-deps-db, mach-nix, }@inp:
+    flake-utils.lib.eachDefaultSystem (system: let
       requirements = builtins.readFile ./requirements.txt;
       python = "python310";
 
-      supportedSystems = [ "aarch64-linux" "x86_64-linux" "aarch64-darwin" "x86_64-darwin" ];
-      forAllSystems = f: nixpkgs.lib.genAttrs supportedSystems
-        (system: f system (import nixpkgs {inherit system;}));
+      pyEnv = mach-nix.lib."${system}".mkPython {
+        inherit requirements;
+        inherit python;
+      };
     in
     {
-      packages = forAllSystems (system: pkgs: let
-        pyEnv = mach-nix.lib."${system}".mkPython {
-          inherit requirements;
-          inherit python;
-        };
-      in {
+      packages = {
         default = pyEnv;
         jupyter = mach-nix.nixpkgs.mkShell {
           buildInputs = [
@@ -38,13 +35,13 @@
             jupyter lab --notebook-dir=~/
           '';
         };
-      });
+      };
 
-      apps = forAllSystems (system: pkgs: {
+      apps = {
         default = {
           type = "app";
           program = "${self.packages.${system}.default.out}/bin/python";
         };
-      });
-    };
+      };
+    });
 }
