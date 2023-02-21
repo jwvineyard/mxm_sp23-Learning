@@ -1,4 +1,5 @@
 from tqdm import tqdm
+import numpy as np
 
 class Agent:
     def get_action(self, observation): pass
@@ -11,8 +12,8 @@ class Agent:
         truncated,
         next_observation): pass
     
-def train_episode(agent, environment):
-    obs, info = environment.reset()
+def train_episode(agent, environment, seed=None):
+    obs, info = environment.reset(seed=seed)
     done = False
 
     while not done:
@@ -28,4 +29,7 @@ def train_episode(agent, environment):
 
 def train(agent, environment, n_episodes=2000):
     for episode in tqdm(range(n_episodes)):
-        train_episode(agent, environment)
+        train_episode(agent, environment, seed=np.random.randint(0, 100000000))
+
+def rate_decay(base=0.95, decay=0.999995):
+    return lambda t: base * (decay ** t)
