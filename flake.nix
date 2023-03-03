@@ -35,9 +35,9 @@
           packages = [ poetry2nix.packages.${system}.poetry self.packages.${system}.default ];
         };
 
-        apps.default = flake-utils.mkApp {
-          drv = self.packages.${system}.myapp;
-          exePath = "bin/python3";
+        apps.default = flake-utils.lib.mkApp {
+          drv = self.packages.${system}.default;
+          exePath = "/bin/python";
         };
       });
 }
