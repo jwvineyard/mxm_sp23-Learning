@@ -1,47 +1,39 @@
 {
-  inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-21.11";
-    flake-utils.url = "github:numtide/flake-utils";
-    pypi-deps-db = {
-      url = "github:DavHau/pypi-deps-db";
-      flake = false;
-    };
-    mach-nix = {
-      url = "github:DavHau/mach-nix/master";
-      inputs.pypi-deps-db.follows = "pypi-deps-db";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
+  inputs.flake-utils.url = "github:numtide/flake-utils";
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-22.11";
+  inputs.poetry2nix = {
+    url = "github:nix-community/poetry2nix";
+    inputs.nixpkgs.follows = "nixpkgs";
   };
 
-  outputs = {self, nixpkgs, flake-utils, pypi-deps-db, mach-nix, }@inp:
-    flake-utils.lib.eachDefaultSystem (system: let
-      requirements = builtins.readFile ./requirements.txt;
-      python = "python310";
+  outputs = { self, nixpkgs, flake-utils, poetry2nix }:
+    flake-utils.lib.eachDefaultSystem (system:
+      let
+        # see https://github.com/nix-community/poetry2nix/tree/master#api for more functions and examples.
+        inherit (poetry2nix.legacyPackages.${system}) mkPoetryApplication defaultPoetryOverrides;
+        pkgs = nixpkgs.legacyPackages.${system};
+      in
+      {
+        packages = {
+          myapp = mkPoetryApplication { 
+            projectDir = self; 
+            overrides = defaultPoetryOverrides.extend
+              (self: super: {
+                gymnasium = super.gymnasium.overridePythonAttrs
+                (old: { buildInputs = (old.buildInputs or [ ]) ++ [ super.setuptools ]; });
 
-      pyEnv = mach-nix.lib."${system}".mkPython {
-        inherit requirements;
-        inherit python;
-      };
-    in
-    {
-      packages = {
-        default = pyEnv;
-        jupyter = mach-nix.nixpkgs.mkShell {
-          buildInputs = [
-            pyEnv
-          ];
+                gymnasium-notices = super.gymnasium-notices.overridePythonAttrs
+                (old: { buildInputs = (old.buildInputs or [ ]) ++ [ super.setuptools ]; });
 
-          shellHook = ''
-            jupyter lab --notebook-dir=~/
-          '';
+                jax-jumpy = super.jax-jumpy.overridePythonAttrs
+                (old: { buildInputs = (old.buildInputs or [ ]) ++ [ super.hatchling ]; });
+              });
+          };
+          default = self.packages.${system}.myapp;
         };
-      };
 
-      apps = {
-        default = {
-          type = "app";
-          program = "${self.packages.${system}.default.out}/bin/python";
+        devShells.default = pkgs.mkShell {
+          packages = [ poetry2nix.packages.${system}.poetry ];
         };
-      };
-    });
+      });
 }
