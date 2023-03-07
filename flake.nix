@@ -28,6 +28,7 @@
                 jax-jumpy = super.jax-jumpy.overridePythonAttrs
                 (old: { buildInputs = (old.buildInputs or [ ]) ++ [ super.hatchling ]; });
               });
+              extraPackages = ps: with ps; [ ps.poetry ];
           };
         };
 
