@@ -33,7 +33,7 @@
         };
 
         devShells.default = pkgs.mkShell {
-          packages = [ poetry2nix.packages.${system}.poetry self.packages.${system}.default ];
+          packages = [ poetry2nix.packages.${system}.poetry ];
         };
 
         apps.default = flake-utils.lib.mkApp {
