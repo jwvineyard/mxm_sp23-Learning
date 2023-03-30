@@ -9,7 +9,7 @@ from tqdm import tqdm
 from daw_etal_two_stage import DawEtalTwoStageMDP
 
 ## Utilities
-def rate_decay(base=0.95, decay=0.999995):
+def rate_decay(base=0.995, decay=0.999995):
     return lambda t: base * (decay ** t)
 
 def unzip(i):
@@ -48,13 +48,14 @@ class QLearning(Agent):
         # self.env = environment
         # self.t = 0
         self.training_error = []
+        self.rewards = []
         self.rng = np.random.default_rng(seed)
 
         self.discount_rate = discount_rate
         self._learning_rate = learning_rate
         self._exploration_rate = exploration_rate
 
-        self.q_values = defaultdict(lambda: np.zeros(self.env.action_space.n))
+        self.q_values = defaultdict(lambda: self.rng.random(self.env.action_space.n))
     
     @property
     def t(self):
@@ -100,8 +101,9 @@ class QLearning(Agent):
         temporal_difference = self.q_update(observation, action, reward, 
                                             terminated, truncated, next_observation)
         self.training_error.append(temporal_difference)
+        self.rewards.append(reward)
         if self.t % 1000 == 0:
-            print(np.mean(list(islice(reversed(self.training_error), 10000))), self.learning_rate, self.exploration_rate)
+            print(np.mean(list(islice(reversed(self.rewards), 10000))), self.learning_rate, self.exploration_rate)
 
 class DynaQ(QLearning):
     def __init__(self,
@@ -156,20 +158,8 @@ class LoCAEnv(gym.Env):
     def enter_phase_two(self):
         raise NotImplementedError
 
-def loca_evaluate(agent, environment, n_episodes=1000, seed=None):
-    rewards = []
-    for i in tqdm(range(n_episodes)):
-        obs, info = environment.reset(seed=seed)
-        done = False
-        total_reward = 0
-        while not done:
-            action = agent.get_action(obs)
-            next_obs, reward, terminated, truncated, info = environment.step(action)
-            done = terminated or truncated
-            total_reward += reward
-            obs = next_obs
-        rewards.append(total_reward)
-    return np.mean(rewards)
+# def loca_evaluate(agent, environment, n_episodes=1000, seed=None):
+    
 
 ## Training Agents
 
@@ -179,7 +169,10 @@ def train_episode(agent, environment, seed=None):
 
     while not done:
         action = agent.get_action(obs)
+        # print(action)
         next_obs, reward, terminated, truncated, info = environment.step(action)
+        # print(obs, reward)
+        # print(environment.render())
 
         # update the agent
         agent.update(obs, action, reward, terminated, truncated, next_obs)
@@ -198,7 +191,8 @@ class LoCATwoStageMDP(LoCAEnv):
 
     def __init__(self, 
             render_mode=None,
-            rewards=[{0: 0.1, 1: 0.4, 2: 0.2, 3: 0.2, 4:0.1}, {1: 0.3, 2: 0.5, 3: 0.2}],
+            # rewards are hardcoded for LoCA task
+            # rewards=[{0: 0.1, 1: 0.4, 2: 0.2, 3: 0.2, 4:0.1}, {1: 0.3, 2: 0.5, 3: 0.2}],
             episodic=False):
         self.observation_space = spaces.Discrete(3)
         self.action_space = spaces.Discrete(2)
@@ -227,7 +221,7 @@ class LoCATwoStageMDP(LoCAEnv):
         if self.loca_phase == 1:
             self._current_state = 0
         else:
-            # the black hole is around state 1.
+            # the black hole is around state 1, so don't exit back to state 0.
             self._current_state = 1
 
         return self._get_obs(), self._get_info()
@@ -243,20 +237,35 @@ class LoCATwoStageMDP(LoCAEnv):
                 self._current_state = 0
                 return self._current_state, reward, self.episodic, False, self._get_info()
 
-
-
 def main():
-    env = DawEtalTwoStageMDP(episodic=True)
-    dyna = DynaQ(env)
+    # env = DawEtalTwoStageMDP(episodic=True)
+    # dyna = DynaQ(env)
+    # # train_episode(dyna, env)
+    # # # print(dyna.sample_action(dyna.sample_state()))
+
+    # train(dyna, env, n_episodes=20)
+
+    # env = LoCATwoStageMDP(episodic=True)
+    # # dyna = DynaQ(env)
     # train_episode(dyna, env)
     # # print(dyna.sample_action(dyna.sample_state()))
 
-    train(dyna, env, n_episodes=20)
+    ## LoCA Evaluation
+    # env = LoCATwoStageMDP(episodic=True)
+    # # dyna = DynaQ(env)
+    # qlearning = QLearning(env)
+    # train(qlearning, env, n_episodes=200)
+    # env.enter_phase_two()
+    # train(qlearning, env, n_episodes=200)
+    # print(qlearning.get_action(0))
 
-    env = LoCATwoStageMDP(episodic=True)
-    # dyna = DynaQ(env)
-    train_episode(dyna, env)
-    # print(dyna.sample_action(dyna.sample_state()))
+    env = gym.make("FrozenLake-v1", render_mode="ansi", is_slippery=False) 
+    env.reset()
+    qlearning = QLearning(env)
+    train(qlearning, env, n_episodes=2000000)
+
+    # for line in fileinput.input():
+    
 
 if __name__ == "__main__":
     main()
