@@ -9,7 +9,7 @@ from tqdm import tqdm
 from daw_etal_two_stage import DawEtalTwoStageMDP
 
 ## Utilities
-def rate_decay(base=0.995, decay=0.999995):
+def rate_decay(base=0.995, decay=0.999):
     return lambda t: base * (decay ** t)
 
 def unzip(i):
@@ -102,8 +102,8 @@ class QLearning(Agent):
                                             terminated, truncated, next_observation)
         self.training_error.append(temporal_difference)
         self.rewards.append(reward)
-        if self.t % 1000 == 0:
-            print(np.mean(list(islice(reversed(self.rewards), 10000))), self.learning_rate, self.exploration_rate)
+        # if self.t % 1000 == 0:
+        #     print(np.mean(list(islice(reversed(self.rewards), 10000))), self.learning_rate, self.exploration_rate)
 
 class DynaQ(QLearning):
     def __init__(self,
@@ -149,8 +149,8 @@ class DynaQ(QLearning):
             (r, s_) = self.model[(s,a)]
             self.q_update(s, a, r, False, False, s_)
 
-        if self.t % 10 == 0:
-            print(np.mean(list(islice(reversed(self.training_error), 10000))), self.learning_rate, self.exploration_rate)
+        # if self.t % 10 == 0:
+        #     print(np.mean(list(islice(reversed(self.training_error), 10000))), self.learning_rate, self.exploration_rate)
 
 ## LoCA Environment and Evaluation
 
@@ -187,17 +187,28 @@ def train(agent, environment, n_episodes=2000):
 
 class LoCATwoStageMDP(LoCAEnv):
     metadata = {"render_modes": ["ansi"], "render_fps": 4}
-    probabilities = [[0.3, 0.7], [0.7, 0.3]]
+    # Probabilities of transition from state 0 to states 1 and 2.
+    probabilities = [
+        # Action 0 - "Left". 30% chance to transition to state 1, 70% chance to transition to state 2.
+        [0.3, 0.7], 
+        # Action 1 - "Right". 70% chance to transition to state 1, 30% chance to transition to state 2.
+        [0.7, 0.3]
+    ]
+
+    rewards = [
+        # Rewards in phase one. State 1 is optimal.
+        {0: 0, 1: 4, 2: 2 },
+        # Rewards in phase two. State 2 is optimal.
+        {0: 0, 1: 1, 2: 2},
+    ];
 
     def __init__(self, 
             render_mode=None,
-            # rewards are hardcoded for LoCA task
-            # rewards=[{0: 0.1, 1: 0.4, 2: 0.2, 3: 0.2, 4:0.1}, {1: 0.3, 2: 0.5, 3: 0.2}],
             episodic=False):
         self.observation_space = spaces.Discrete(3)
         self.action_space = spaces.Discrete(2)
 
-        self.reward_distributions = tuple(map(lambda x: tuple(unzip(x.items())), rewards))
+        # self.reward_distributions = tuple(map(lambda x: tuple(unzip(x.items())), rewards))
         self.episodic = episodic
 
         assert render_mode is None or render_mode in self.metadata["render_modes"]
@@ -213,6 +224,9 @@ class LoCATwoStageMDP(LoCAEnv):
 
     def enter_phase_two(self):
         self.loca_phase = 2
+
+    def reset_loca(self):
+        self.loca_phase = 1
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
@@ -233,12 +247,12 @@ class LoCATwoStageMDP(LoCAEnv):
                 self._current_state = self.np_random.choice([1,2], p=self.probabilities[action])
                 return self._current_state, 0, False, False, self._get_info()
             case s:
-                reward = self.np_random.choice(self.reward_distributions[s-1][0], p=self.reward_distributions[s-1][1])
+                reward = self.rewards[self.loca_phase-1][s]
                 self._current_state = 0
                 return self._current_state, reward, self.episodic, False, self._get_info()
 
 def main():
-    # env = DawEtalTwoStageMDP(episodic=True)
+    env = DawEtalTwoStageMDP(episodic=True)
     # dyna = DynaQ(env)
     # # train_episode(dyna, env)
     # # # print(dyna.sample_action(dyna.sample_state()))
@@ -251,21 +265,35 @@ def main():
     # # print(dyna.sample_action(dyna.sample_state()))
 
     ## LoCA Evaluation
-    # env = LoCATwoStageMDP(episodic=True)
-    # # dyna = DynaQ(env)
-    # qlearning = QLearning(env)
-    # train(qlearning, env, n_episodes=200)
-    # env.enter_phase_two()
-    # train(qlearning, env, n_episodes=200)
-    # print(qlearning.get_action(0))
+    env = LoCATwoStageMDP(episodic=True)
 
-    env = gym.make("FrozenLake-v1", render_mode="ansi", is_slippery=False) 
-    env.reset()
-    qlearning = QLearning(env)
-    train(qlearning, env, n_episodes=2000000)
+    naive_loca_eval(QLearning(env), env)
+    env.reset_loca()
+    naive_loca_eval(DynaQ(env, n_simulations=20), env)
+
+    # env = gym.make("FrozenLake-v1", render_mode="ansi", is_slippery=False) 
+    # env.reset()
+    # qlearning = QLearning(env)
+    # train(qlearning, env, n_episodes=2000000)
 
     # for line in fileinput.input():
     
+def naive_loca_eval(agent, env):
+    env.reset()
+    # Train on phase one
+    train(agent, env, n_episodes=20000)
+    # Sample action in state 0. Should yield 1. See probabilities and rewards above.
+    sample1 = agent.get_action(0)
+    print(sample1, " -- Phase One: ", "PASS" if sample1 == 1 else "FAIL")
+    
+    # Now enter LoCA phase two
+    env.enter_phase_two()
+    # Train on phase two
+    train(agent, env, n_episodes=20000)
+    
+    # Sample action in state 0. Should now yield 0, if agent is adaptive. See probabilities and rewards above.
+    sample2 = agent.get_action(0)
+    print(sample2, " -- Phase Two: ", "PASS" if sample2 == 0 else "FAIL")
 
 if __name__ == "__main__":
     main()
