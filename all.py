@@ -8,8 +8,11 @@ from tqdm import tqdm
 
 from daw_etal_two_stage import DawEtalTwoStageMDP
 
+## Helper global variable for debugging
+LOCA_DEBUG = False
+
 ## Utilities
-def rate_decay(base=0.995, decay=0.999):
+def rate_decay(base=0.995, decay=0.99999999):
     return lambda t: base * (decay ** t)
 
 def unzip(i):
@@ -86,6 +89,11 @@ class QLearning(Agent):
         temporal_difference = (
             reward + self.discount_rate * future_q_value - self.q_values[observation][action]
         )
+        
+        if LOCA_DEBUG:
+            print(f"Q-Update: ({observation}, {action}, {reward}, {next_observation}) RPE: {temporal_difference} {self.learning_rate}")
+            print(self.q_values)
+
         self.q_values[observation][action] = (
             self.q_values[observation][action] + self.learning_rate * temporal_difference
         )
@@ -115,9 +123,7 @@ class DynaQ(QLearning):
             seed=None):
         super().__init__(environment, discount_rate, learning_rate, exploration_rate, seed)
         self.n_simulations = n_simulations
-        # Dictionary where keys are current states, and values are arrays the size of the action space, 
-        # where for each action we have a pair of (reward, next_state).
-        # self.model = defaultdict(lambda: np.zeros(self.env.action_space.n, dtype=[('reward', np.float32), ('next_state', np.intc)]))
+        
         self.model = dict()
 
     def sample_state(self):
@@ -181,18 +187,18 @@ def train_episode(agent, environment, seed=None):
         done = terminated or truncated
         obs = next_obs
 
-def train(agent, environment, n_episodes=2000):
-    for episode in tqdm(range(n_episodes)):
-        train_episode(agent, environment, seed=np.random.randint(0, 100000000))
+# def train(agent, environment, n_episodes=2000):
+#     for episode in tqdm(range(n_episodes)):
+#         train_episode(agent, environment, seed=np.random.randint(0, 100000000))
 
 class LoCATwoStageMDP(LoCAEnv):
     metadata = {"render_modes": ["ansi"], "render_fps": 4}
     # Probabilities of transition from state 0 to states 1 and 2.
     probabilities = [
-        # Action 0 - "Left". 30% chance to transition to state 1, 70% chance to transition to state 2.
-        [0.3, 0.7], 
-        # Action 1 - "Right". 70% chance to transition to state 1, 30% chance to transition to state 2.
-        [0.7, 0.3]
+        # Action 0 - "Left". 70% chance to transition to state 1, 30% chance to transition to state 2.
+        [0.7, 0.3], 
+        # Action 1 - "Right". 30% chance to transition to state 1, 70% chance to transition to state 2.
+        [0.3, 0.7]
     ]
 
     rewards = [
@@ -202,14 +208,12 @@ class LoCATwoStageMDP(LoCAEnv):
         {0: 0, 1: 1, 2: 2},
     ];
 
-    def __init__(self, 
-            render_mode=None,
-            episodic=False):
+    def __init__(self, render_mode=None):
         self.observation_space = spaces.Discrete(3)
         self.action_space = spaces.Discrete(2)
 
         # self.reward_distributions = tuple(map(lambda x: tuple(unzip(x.items())), rewards))
-        self.episodic = episodic
+        # self.episodic = episodic
 
         assert render_mode is None or render_mode in self.metadata["render_modes"]
         self.render_mode = render_mode
@@ -224,19 +228,16 @@ class LoCATwoStageMDP(LoCAEnv):
 
     def enter_phase_two(self):
         self.loca_phase = 2
-
-    def reset_loca(self):
-        self.loca_phase = 1
+        self._current_state = 1
+        return self._get_obs(), self._get_info()  
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
         self.step_count = 0
 
-        if self.loca_phase == 1:
-            self._current_state = 0
-        else:
-            # the black hole is around state 1, so don't exit back to state 0.
-            self._current_state = 1
+        # Reset to 
+        self.loca_phase = 1
+        self._current_state = 0
 
         return self._get_obs(), self._get_info()
 
@@ -248,11 +249,15 @@ class LoCATwoStageMDP(LoCAEnv):
                 return self._current_state, 0, False, False, self._get_info()
             case s:
                 reward = self.rewards[self.loca_phase-1][s]
-                self._current_state = 0
-                return self._current_state, reward, self.episodic, False, self._get_info()
+
+                if self.loca_phase == 2: 
+                    self._current_state = 1
+                else:
+                    self._current_state = 0
+                return self._current_state, reward, False, False, self._get_info()
 
 def main():
-    env = DawEtalTwoStageMDP(episodic=True)
+    env = DawEtalTwoStageMDP()
     # dyna = DynaQ(env)
     # # train_episode(dyna, env)
     # # # print(dyna.sample_action(dyna.sample_state()))
@@ -265,11 +270,10 @@ def main():
     # # print(dyna.sample_action(dyna.sample_state()))
 
     ## LoCA Evaluation
-    env = LoCATwoStageMDP(episodic=True)
+    env = LoCATwoStageMDP()
 
     naive_loca_eval(QLearning(env), env)
-    env.reset_loca()
-    naive_loca_eval(DynaQ(env, n_simulations=20), env)
+    # naive_loca_eval(DynaQ(env, n_simulations=10), env)
 
     # env = gym.make("FrozenLake-v1", render_mode="ansi", is_slippery=False) 
     # env.reset()
@@ -277,23 +281,47 @@ def main():
     # train(qlearning, env, n_episodes=2000000)
 
     # for line in fileinput.input():
-    
+
+def train(agent, environment, obs, n_actions=2000, seed=None):
+    for i in tqdm(range(n_actions)):
+        action = agent.get_action(obs)
+        next_obs, reward, terminated, truncated, info = environment.step(action)
+        agent.update(obs, action, reward, terminated, truncated, next_obs)
+        obs = next_obs
+
+        if (i in [0, 10, n_actions-11, n_actions-1]) and agent.__class__.__name__ == "DynaQ":
+            print("i=", i)
+            global LOCA_DEBUG
+            LOCA_DEBUG = not LOCA_DEBUG
+
+            print(agent.model)
+            print(agent.q_values)
+
+def sample_state(agent, 0):
+    a = []
+    for i in range(100):
+        a.append(agent.get_action(0))
+    # Dumb way to take the mode of a list
+    vals, counts = np.unique(array, return_counts=True)
+    index = np.argmax(counts)
+    return vals[index]
+
 def naive_loca_eval(agent, env):
-    env.reset()
+    obs, _ = env.reset()
     # Train on phase one
-    train(agent, env, n_episodes=20000)
-    # Sample action in state 0. Should yield 1. See probabilities and rewards above.
-    sample1 = agent.get_action(0)
-    print(sample1, " -- Phase One: ", "PASS" if sample1 == 1 else "FAIL")
+    train(agent, env, obs, n_actions=20000)
+    # Sample action in state 0. Should yield 0. See probabilities and rewards above.
+
+    print(sample1, " -- Phase One: ", "PASS" if sample1 == 0 else "FAIL")
     
     # Now enter LoCA phase two
-    env.enter_phase_two()
+    obs, _ = env.enter_phase_two()
     # Train on phase two
-    train(agent, env, n_episodes=20000)
+    train(agent, env, obs, n_actions=20000)
     
-    # Sample action in state 0. Should now yield 0, if agent is adaptive. See probabilities and rewards above.
+    # Sample action in state 0. Should now yield 1, if agent is adaptive. See probabilities and rewards above.
     sample2 = agent.get_action(0)
-    print(sample2, " -- Phase Two: ", "PASS" if sample2 == 0 else "FAIL")
+    print(sample2, " -- Phase Two: ", "PASS" if sample2 == 1 else "FAIL")
 
 if __name__ == "__main__":
     main()
