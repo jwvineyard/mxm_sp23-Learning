@@ -2,7 +2,7 @@
 
 Authors: Peizhe Li, Jimmy Vineyard, Seungyeon Oh, Jack Maloney, Amy Cochran, and Haley Colgate Kottler
 
-For convenience, the simulation code for our adaptation of the two-stage Markov task that incorporates local learning is provided both as a Python script in "FinalSimulation.py", and as a Jupyter Notebook in "FinalSimulation.ipynb".
+The simulation code for our adaptation of the two-stage Markov task that incorporates local learning is provided as a Jupyter Notebook in "FinalSimulation.ipynb".
 
 ## Requirements
 
